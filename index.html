@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Obra Sala 1710</title>
+<style>
+:root { --fundo:#f6f4f8; --cartao:#fff; --texto:#1c1424; --suave:#6f6679; --borda:#e3dde9; --roxo:#6b3fa0; --ruim:#c0392b; }
+@media (prefers-color-scheme: dark) { :root { --fundo:#141018; --cartao:#1d1823; --texto:#efeaf3; --suave:#a69db0; --borda:#332b3c; --roxo:#a77fe0; --ruim:#ff7a6b; } }
+* { box-sizing:border-box; }
+html, body { margin:0; min-height:100%; background:var(--fundo); color:var(--texto); font:16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { display:grid; place-items:center; min-height:100vh; padding:16px; }
+form { width:min(380px, 100%); background:var(--cartao); border:1px solid var(--borda); border-radius:18px; padding:28px 26px 24px; box-shadow:0 10px 40px rgba(30,10,50,.08); }
+.logo { width:44px; height:44px; border-radius:12px; background:var(--roxo); color:#fff; display:grid; place-items:center; font-weight:700; font-size:14px; margin-bottom:14px; }
+h1 { font-size:21px; margin:0 0 4px; }
+p { margin:0 0 20px; color:var(--suave); font-size:14px; }
+label { display:block; font-size:13px; font-weight:600; margin:0 0 6px; }
+input[type=text], input[type=password] { width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--borda); background:transparent; color:inherit; font:inherit; margin-bottom:14px; }
+input:focus { outline:2px solid var(--roxo); outline-offset:1px; border-color:transparent; }
+.lembrar { display:flex; gap:8px; align-items:center; font-weight:400; font-size:14px; color:var(--suave); margin-bottom:18px; }
+button { width:100%; padding:12px; border:0; border-radius:10px; background:var(--roxo); color:#fff; font:600 15px inherit; font-family:inherit; cursor:pointer; }
+button:disabled { opacity:.6; cursor:wait; }
+.erro { color:var(--ruim); font-size:14px; min-height:20px; margin:12px 0 0; }
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <div class="logo">1710</div>
+  <h1>Painel da obra</h1>
+  <p>Acesso restrito. Entre com o usuário e a senha que você recebeu.</p>
+  <label for="u">Usuário</label>
+  <input id="u" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="s">Senha</label>
+  <input id="s" name="password" type="password" autocomplete="current-password" required>
+  <label class="lembrar"><input type="checkbox" id="lembrar" checked> Lembrar neste aparelho</label>
+  <button id="b" type="submit">Entrar</button>
+  <div class="erro" id="erro" role="alert"></div>
+</form>
+<script>
+(function () {
+  'use strict';
+  const SAL = '59bc600b2c17c368574cccd7518ef734', ITER = 1000000, GUARDA = 'obra1710-bruna';
+  const $ = id => document.getElementById(id);
+  const hex = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+  const b64 = u => btoa(String.fromCharCode(...u));
+  const deb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+  async function derivar(usuario, senha) {
+    const mat = await crypto.subtle.importKey('raw', new TextEncoder().encode(usuario.trim().toLowerCase() + ':' + senha), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: hex(SAL), iterations: ITER }, mat, 256));
+  }
+  async function decifrar(raw) {
+    const chave = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const r = await fetch('p/app.bin', { cache: 'no-cache' });
+    if (!r.ok) throw new Error('rede');
+    const b = new Uint8Array(await r.arrayBuffer());
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12) }, chave, b.subarray(12));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  function montar(app, raw) {
+    const urls = {};
+    for (const [n, txt] of Object.entries(app.files)) urls[n] = URL.createObjectURL(new Blob([txt], { type: n.endsWith('.css') ? 'text/css' : 'text/javascript' }));
+    let html = app.html
+      .replace(/(<script[^>]*\ssrc=")([^"]+)(")/g, (m, a, s, z) => urls[s] ? a + urls[s] + z : m)
+      .replace(/(<link[^>]*\shref=")([^"]+)(")/g, (m, a, s, z) => urls[s] ? a + urls[s] + z : m);
+    const cfg = JSON.stringify({ k: b64(raw), m: app.assets }).replace(/</g, '\\u003c');
+    html = html.replace('<!--BRUNA-RUNTIME-->', '<script>window.__BR=' + cfg + ';<\/script><script src="' + urls['bruna-runtime.js'] + '"><\/script>');
+    document.open(); document.write(html); document.close();
+  }
+  async function entrar(raw, lembrar) {
+    const app = await decifrar(raw);
+    try { if (lembrar) localStorage.setItem(GUARDA, b64(raw)); } catch (e) {}
+    montar(app, raw);
+  }
+
+  let salvo = null; try { salvo = localStorage.getItem(GUARDA); } catch (e) {}
+  if (salvo) {
+    $('b').disabled = true; $('b').textContent = 'Abrindo…';
+    entrar(deb64(salvo), true).catch(err => {
+      if (err && err.message === 'rede') $('erro').textContent = 'Sem conexão. Tente de novo.';
+      else try { localStorage.removeItem(GUARDA); } catch (e) {}
+      $('b').disabled = false; $('b').textContent = 'Entrar';
+    });
+  }
+  $('f').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    $('erro').textContent = ''; $('b').disabled = true; $('b').textContent = 'Conferindo…';
+    try {
+      if ($('u').value.trim().toLowerCase() !== 'bruna') throw new Error('senha');
+      const raw = await derivar($('u').value, $('s').value);
+      await entrar(raw, $('lembrar').checked);
+    } catch (err) {
+      $('erro').textContent = err && err.message === 'rede' ? 'Sem conexão. Tente de novo.' : 'Usuário ou senha incorretos.';
+      $('b').disabled = false; $('b').textContent = 'Entrar';
+    }
+  });
+})();
+</script>
+</body>
+</html>
