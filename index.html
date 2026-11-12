@@ -64,7 +64,7 @@ button:disabled { opacity:.6; cursor:wait; }
     let html = app.html
       .replace(/(<script[^>]*\ssrc=")([^"]+)(")/g, (m, a, s, z) => urls[s] ? a + urls[s] + z : m)
       .replace(/(<link[^>]*\shref=")([^"]+)(")/g, (m, a, s, z) => urls[s] ? a + urls[s] + z : m);
-    const cfg = JSON.stringify({ k: b64(raw), m: app.assets }).replace(/</g, '\\u003c');
+    const cfg = JSON.stringify({ k: b64(raw), m: app.assets, u: urls }).replace(/</g, '\\u003c');
     html = html.replace('<!--BRUNA-RUNTIME-->', '<script>window.__BR=' + cfg + ';<\/script><script src="' + urls['bruna-runtime.js'] + '"><\/script>');
     document.open(); document.write(html); document.close();
   }
